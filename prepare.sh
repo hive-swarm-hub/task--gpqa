@@ -1,39 +1,27 @@
 #!/usr/bin/env bash
-# Download GPQA Diamond dataset. Run once.
 set -euo pipefail
-
 mkdir -p data
-
-echo "Downloading GPQA Diamond..."
+echo "Downloading GPQA..."
 python3 -c "
 from datasets import load_dataset
-import json, pathlib, random
+import json, pathlib
 
-random.seed(42)
 ds = load_dataset('ankner/gpqa', split='train')
-# filter to diamond subset and sample 50
-diamond = [r for r in ds if r.get('subset', '') == 'gpqa_diamond']
-if not diamond:
-    diamond = list(ds)  # fallback if no subset field
-random.shuffle(diamond)
-diamond = diamond[:50]
+ds = ds.shuffle(seed=42)
+items = list(ds)
+n = int(len(items) * 0.8)
 
-out = pathlib.Path('data/test.jsonl')
-with out.open('w') as f:
-    for row in diamond:
-        # choices are in columns: Correct Answer, Incorrect Answer 1, 2, 3
-        correct = row['Correct Answer']
-        choices = [correct, row['Incorrect Answer 1'], row['Incorrect Answer 2'], row['Incorrect Answer 3']]
-        random.shuffle(choices)
-        answer_idx = choices.index(correct)
-        answer_letter = 'ABCD'[answer_idx]
-        f.write(json.dumps({
-            'question': row['Question'],
-            'choices': choices,
-            'answer': answer_letter,
-        }) + '\n')
+dev_out = pathlib.Path('data/dev.jsonl')
+with dev_out.open('w') as f:
+    for row in items[:n]:
+        f.write(json.dumps({'question': row['question'], 'answer': row['answer'], 'choices': row.get('choices', [])}) + '\n')
 
-print(f'Wrote {len(diamond)} problems to {out}')
+test_out = pathlib.Path('data/test.jsonl')
+with test_out.open('w') as f:
+    for row in items[n:]:
+        f.write(json.dumps({'question': row['question'], 'answer': row['answer'], 'choices': row.get('choices', [])}) + '\n')
+
+print(f'Dev:  {n} problems -> {dev_out}')
+print(f'Test: {len(items)-n} problems -> {test_out}')
 "
-
-echo "Done. $(wc -l < data/test.jsonl) problems in data/test.jsonl"
+echo "Done."
